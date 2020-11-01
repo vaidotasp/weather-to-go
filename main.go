@@ -5,11 +5,12 @@
 package main
 
 import (
-	// "encoding/json"
 	"encoding/json"
 	"flag"
 	"fmt"
+	"github.com/joho/godotenv"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"os"
 )
@@ -21,24 +22,69 @@ type Todo struct {
 	Completed bool   `json:"completed"`
 }
 
+type WDef struct {
+	Main string `json:"main"`
+	Desc string `json: "description"`
+}
+
+type Temp struct {
+	TempCurrent int `json:"temp"`
+	Feels       int `json:"feels_like"`
+	TempMin     int `json:"temp_min"`
+	TempMax     int `json:"temp_max"`
+	Humidity    int `json:"humidity"`
+}
+
+type WeatherResponse struct {
+	WeatherDescription []WDef `json:"weather"`
+	Temperature        Temp   `json:"main"`
+}
+
 func getWeather(t string) {
-	resp, err := http.Get("https://jsonplaceholder.typicode.com/todos/")
+	weatherAPI := os.Getenv("WEATHER_API")
+	city := "London" //TODO: dynamic
+	country := "GB"  //TODO: dynamic
+	weatherURL := fmt.Sprintf("http://api.openweathermap.org/data/2.5/weather?units=metric&q=%s,%s&appid=%s", city, country, weatherAPI)
+	// weatherURL1 := "http://www.api.openweathermap.org/data/2.5/weather"
+	log.Print(weatherURL)
+	res, err := http.Get(weatherURL)
+
+	//Handle Err
 	if err != nil {
-		// handle error
+		log.Fatal("Error retrieving weather from the endpoint: ", err)
 	}
-	defer resp.Body.Close()
-	body, err := ioutil.ReadAll(resp.Body) //body is json
-	// fmt.Printf(": %+v", len(body))
-	var todos []Todo
-	json.Unmarshal([]byte(body), &todos)
-	fmt.Printf("Todos : %+v", todos)
-	// var data []string
-	// _ = json.Unmarshal([]byte(body), &data)
-	// log.Printf("Unmarshaled: %v", data)
-	// fmt.Printf("JSON: %s", body)
+	//Handle non 200 response
+	if res.StatusCode != 200 {
+		log.Fatal("StatusCode response ", res.StatusCode)
+	}
+
+	defer res.Body.Close()
+	body, err := ioutil.ReadAll(res.Body)
+
+	re := string(body)
+	log.Print((re))
+	var weatherResponse WeatherResponse
+	json.Unmarshal([]byte(body), &weatherResponse)
+	log.Print(weatherResponse.WeatherDescription)
+	log.Print(weatherResponse.Temperature)
+	// var todos []Todo
+	// json.Unmarshal([]byte(body), &todos)
+	// log.Print(todos[0])
+	// for i := 0; i < 10; i++ {
+	// 	fmt.Printf("Todo : %+v\n", todos[i])
+
+	// }
+}
+
+func initEnv() {
+	err := godotenv.Load()
+	if err != nil {
+		log.Fatal("Error loading .env file")
+	}
 }
 
 func main() {
+	initEnv()
 	//TODO: This can be a separate func? Set the flags
 	time := flag.String("t", "", "Time (day|week|month) to get the forecast")
 	flag.Parse()
