@@ -1,54 +1,69 @@
-//TODO: Print mock forecast in case of -t flag
-//TODO: Non empty -t flag checks for day/week/month string matching
-//TODO: Valid -t flag makes a json request parses the response and prints out
-
 package main
 
 import (
 	"encoding/json"
-	"flag"
 	"fmt"
 	"github.com/joho/godotenv"
+	"github.com/urfave/cli/v2"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
 )
 
-type Todo struct {
-	UserId    int    `json:"userId"`
-	Id        int    `json:"id"`
-	Title     string `json:"title"`
-	Completed bool   `json:"completed"`
-}
-
 type WDef struct {
 	Main string `json:"main"`
-	Desc string `json: "description"`
+	Desc string `json:"description"`
+}
+
+type Current struct {
+	Sunrise     int64   `json:"sunrise"`
+	Sunset      int64   `json:"sunset"`
+	TempCurrent float64 `json:"temp"`
+	Humidity    int     `json:"humidity"`
+	Feels       float64 `json:"feels_like"`
+	Description []WDef  `json:"weather"`
 }
 
 type Temp struct {
-	TempCurrent int `json:"temp"`
-	Feels       int `json:"feels_like"`
-	TempMin     int `json:"temp_min"`
-	TempMax     int `json:"temp_max"`
-	Humidity    int `json:"humidity"`
+	Day     int     `json:"day"`
+	Night   int     `json:"night"`
+	Evening int     `json:"eve"`
+	Morning int     `json:"morn"`
+	Min     float64 `json:"min"`
+	Max     float64 `json:"max"`
+}
+type DailyForecasts struct {
+	Sunrise int64 `json:"sunrise"`
+	Sunset  int64 `json:"sunset"`
+	Temp    Temp  `json:"temp"`
 }
 
 type WeatherResponse struct {
-	WeatherDescription []WDef `json:"weather"`
-	Temperature        Temp   `json:"main"`
+	Description []DailyForecasts `json:"daily"`
+	Current     Current          `json:"current"`
 }
 
-func getWeather(t string) {
-	weatherAPI := os.Getenv("WEATHER_API")
-	city := "London" //TODO: dynamic
-	country := "GB"  //TODO: dynamic
-	weatherURL := fmt.Sprintf("http://api.openweathermap.org/data/2.5/weather?units=metric&q=%s,%s&appid=%s", city, country, weatherAPI)
-	// weatherURL1 := "http://www.api.openweathermap.org/data/2.5/weather"
-	log.Print(weatherURL)
-	res, err := http.Get(weatherURL)
+func formatDayResponse(payload WeatherResponse) {
+	log.Println("day response")
+	log.Print(payload)
+}
 
+func formatWeekResponse(payload WeatherResponse) {
+	log.Println("week response")
+	log.Print(payload)
+}
+
+func getWeather(weatherInterval string) {
+	weatherAPI := os.Getenv("WEATHER_API")
+	// we need to get dynamic lat long somehow
+	lat := "33.441792"  //TODO: Dynamic somehow
+	lon := "-94.037689" //TODO: Dynamic somehow
+	weatherURL := fmt.Sprintf("http://api.openweathermap.org/data/2.5/onecall?exclude=hourly,minutely,alerts&units=metric&lat=%s&lon=%s&appid=%s", lat, lon, weatherAPI)
+	log.Print(weatherURL)
+
+	//Actual GET Req here
+	res, err := http.Get(weatherURL)
 	//Handle Err
 	if err != nil {
 		log.Fatal("Error retrieving weather from the endpoint: ", err)
@@ -57,23 +72,22 @@ func getWeather(t string) {
 	if res.StatusCode != 200 {
 		log.Fatal("StatusCode response ", res.StatusCode)
 	}
-
 	defer res.Body.Close()
 	body, err := ioutil.ReadAll(res.Body)
 
-	re := string(body)
-	log.Print((re))
 	var weatherResponse WeatherResponse
 	json.Unmarshal([]byte(body), &weatherResponse)
-	log.Print(weatherResponse.WeatherDescription)
-	log.Print(weatherResponse.Temperature)
-	// var todos []Todo
-	// json.Unmarshal([]byte(body), &todos)
-	// log.Print(todos[0])
-	// for i := 0; i < 10; i++ {
-	// 	fmt.Printf("Todo : %+v\n", todos[i])
 
-	// }
+	//Format and output of the response handler
+	switch weatherInterval {
+	case "day":
+		formatDayResponse(weatherResponse)
+	case "week":
+		formatWeekResponse(weatherResponse)
+		log.Print(weatherInterval)
+	default:
+		log.Print("Unsupported weather command, use help command to find out what's supported")
+	}
 }
 
 func initEnv() {
@@ -84,31 +98,37 @@ func initEnv() {
 }
 
 func main() {
+	log.Println("----------------------program start---------------------")
+	//Load env file
 	initEnv()
-	//TODO: This can be a separate func? Set the flags
-	time := flag.String("t", "", "Time (day|week|month) to get the forecast")
-	flag.Parse()
 
-	//TODO: Print Defaults if no arguments were passed
-	if *time == "" {
-		fmt.Println("Provide required time for forecast (day|week|month)")
-		flag.PrintDefaults()
-		os.Exit(1)
-	} else if *time == "day" {
-		fmt.Println("Printing DAY forecast")
-		getWeather(*time)
-		os.Exit(1)
-	} else if *time == "week" {
-		fmt.Println("Printing WEEK forecast")
-		os.Exit(1)
-	} else if *time == "month" {
-		fmt.Println("Printing MONTH forecast")
-		os.Exit(1)
-	} else {
-		fmt.Println("Please choose a supported forecast param (day|week|month)")
-		os.Exit(1)
+	//Load up the cli
+	app := &cli.App{}
+	app.Name = "Weather forecast in your CLI"
+	app.Usage = "Use of the the commands below to get started"
+	app.Commands = []*cli.Command{
+		{
+			Name:    "day",
+			Aliases: []string{"d"},
+			Usage:   "weather for the current day",
+			Action: func(c *cli.Context) error {
+				getWeather("day")
+				return nil
+			},
+		},
+		{
+			Name:    "week",
+			Aliases: []string{"w"},
+			Usage:   "weather for the current week",
+			Action: func(c *cli.Context) error {
+				getWeather("week")
+				return nil
+			},
+		},
 	}
 
-	//Just print everything out for now
-	fmt.Printf("weather: %s\n", *time)
+	err := app.Run(os.Args)
+	if err != nil {
+		log.Fatal(err)
+	}
 }
