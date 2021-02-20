@@ -44,11 +44,28 @@ type WeatherResponse struct {
 	Current     Current          `json:"current"`
 }
 
-func formatDayResponse(payload WeatherResponse) {
-	log.Println("day response")
-	log.Print(payload)
+type Location struct {
+	lat string
+	lon string
 }
 
+//Takes in raw weather payload and returns (prints out) formatted info
+func formatDayResponse(payload WeatherResponse, location Location) {
+
+	temp := payload.Current.TempCurrent
+	tempF := (temp * 9 / 5) + 32
+	feels_like := payload.Current.Feels
+	feels_likeF := (feels_like * 9 / 5) + 32
+	humidity := payload.Current.Humidity
+	description := payload.Current.Description[0].Desc
+
+	//Printing everything that we care about out
+	fmt.Printf("Current weather in Lat/Lon (%s, %s)\n", location.lat, location.lon)
+	fmt.Printf("Temp: %.0fC/%.0fF | Feels Like: %.0fC/%.0fF \n", temp, tempF, feels_like, feels_likeF)
+	fmt.Printf("Humidity: %d%% | Description: %s \n", humidity, description)
+}
+
+//Takes in raw weather payload and returns (prints out) formatted info
 func formatWeekResponse(payload WeatherResponse) {
 	log.Println("week response")
 	log.Print(payload)
@@ -56,10 +73,10 @@ func formatWeekResponse(payload WeatherResponse) {
 
 func getWeather(weatherInterval string) {
 	weatherAPI := os.Getenv("WEATHER_API")
-	// we need to get dynamic lat long somehow
-	lat := "33.441792"  //TODO: Dynamic somehow
-	lon := "-94.037689" //TODO: Dynamic somehow
-	weatherURL := fmt.Sprintf("http://api.openweathermap.org/data/2.5/onecall?exclude=hourly,minutely,alerts&units=metric&lat=%s&lon=%s&appid=%s", lat, lon, weatherAPI)
+	//TODO:we need to get dynamic lat long somehow
+	var location = Location{lat: "33.441792", lon: "-94.037689"}
+
+	weatherURL := fmt.Sprintf("http://api.openweathermap.org/data/2.5/onecall?exclude=hourly,minutely,alerts&units=metric&lat=%s&lon=%s&appid=%s", location.lat, location.lon, weatherAPI)
 	log.Print(weatherURL)
 
 	//Actual GET Req here
@@ -81,10 +98,10 @@ func getWeather(weatherInterval string) {
 	//Format and output of the response handler
 	switch weatherInterval {
 	case "day":
-		formatDayResponse(weatherResponse)
+		formatDayResponse(weatherResponse, location)
 	case "week":
 		formatWeekResponse(weatherResponse)
-		log.Print(weatherInterval)
+		// log.Print(weatherInterval)
 	default:
 		log.Print("Unsupported weather command, use help command to find out what's supported")
 	}
