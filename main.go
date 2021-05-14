@@ -4,11 +4,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/joho/godotenv"
+	"github.com/manifoldco/promptui"
 	"github.com/urfave/cli/v2"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
+	"os/exec"
 )
 
 type WDef struct {
@@ -49,9 +51,17 @@ type Location struct {
 	lon string
 }
 
+type CoordinateResponse struct {
+	Status string `json:"status"`
+	Lat float64 `json:"lat"`
+	Lon float64 `json:"lon"`
+	City string `json:"city"`
+	Zip string `json:"zip"`
+	Country string `json:"country"`
+}
+
 //Takes in raw weather payload and returns (prints out) formatted info
 func formatDayResponse(payload WeatherResponse, location Location) {
-
 	temp := payload.Current.TempCurrent
 	tempF := (temp * 9 / 5) + 32
 	feels_like := payload.Current.Feels
@@ -70,6 +80,8 @@ func formatWeekResponse(payload WeatherResponse) {
 	log.Println("week response")
 	log.Print(payload)
 }
+
+//TODO: implement this>>>> https://github.com/manifoldco/promptui
 
 func getWeather(weatherInterval string) {
 	weatherAPI := os.Getenv("WEATHER_API")
@@ -114,8 +126,67 @@ func initEnv() {
 	}
 }
 
+// type LocationResponse struct {
+// 	CoordinateResponse
+// }
+
+func locationPrompt() (CoordinateResponse ) {
+	// var locationResponse LocationResponse
+	log.Print("Reading location...")
+
+	prompt := promptui.Select{
+		Label: "Grab locatin from?",
+		Items: []string{"IP", "Manual"},
+	}
+
+	_, result, err := prompt.Run()
+
+	if err != nil {
+		log.Fatal("Prompt failed %v\n", err)
+	}
+
+	log.Printf("You choose %q\n", result)
+
+	if result == "Manual" {
+		log.Fatal("Manual method not implmemented")
+
+	}
+
+	if result == "IP" {
+		//Get the public IP
+		ipCMD := exec.Command("curl", "ifconfig.me")
+		stdout, err := ipCMD.Output()
+
+		if err != nil {
+			log.Print(err)
+		}
+
+		ip := string(stdout)
+		log.Print(ip)
+
+		//example: http://ip-api.com/json/71.241.244.40
+		//Run IP to get coordinate out of it
+		var ipCoordURL = "http://ip-api.com/json/"
+		coordCMD := exec.Command("curl", ipCoordURL + ip)
+		coordRes, err := coordCMD.Output()
+
+		if err != nil {
+			log.Print(err)
+		}
+
+		var coordinateResponse CoordinateResponse
+		json.Unmarshal([]byte(coordRes), &coordinateResponse)
+		log.Print(coordinateResponse)
+		// locationResponse = coordinateResponse
+		return coordinateResponse
+	}
+	// return nil
+	// return coordinateResponse
+}
+
 func main() {
-	log.Println("----------------------program start---------------------")
+	//Adds file lines to log outputs for better debugging
+	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	//Load env file
 	initEnv()
 
@@ -129,6 +200,8 @@ func main() {
 			Aliases: []string{"d"},
 			Usage:   "weather for the current day",
 			Action: func(c *cli.Context) error {
+				loc := locationPrompt()
+				log.Printf(loc.City);
 				getWeather("day")
 				return nil
 			},
@@ -144,6 +217,7 @@ func main() {
 		},
 	}
 
+	log.Println("----------------------program end---------------------")
 	err := app.Run(os.Args)
 	if err != nil {
 		log.Fatal(err)
