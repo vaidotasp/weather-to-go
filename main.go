@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/joho/godotenv"
 	"github.com/manifoldco/promptui"
@@ -35,6 +36,7 @@ type Temp struct {
 	Min     float64 `json:"min"`
 	Max     float64 `json:"max"`
 }
+
 type DailyForecasts struct {
 	Sunrise int64 `json:"sunrise"`
 	Sunset  int64 `json:"sunset"`
@@ -52,12 +54,12 @@ type Location struct {
 }
 
 type CoordinateResponse struct {
-	Status string `json:"status"`
-	Lat float64 `json:"lat"`
-	Lon float64 `json:"lon"`
-	City string `json:"city"`
-	Zip string `json:"zip"`
-	Country string `json:"country"`
+	Status  string  `json:"status"`
+	Lat     float64 `json:"lat"`
+	Lon     float64 `json:"lon"`
+	City    string  `json:"city"`
+	Zip     string  `json:"zip"`
+	Country string  `json:"country"`
 }
 
 //Takes in raw weather payload and returns (prints out) formatted info
@@ -81,15 +83,13 @@ func formatWeekResponse(payload WeatherResponse) {
 	log.Print(payload)
 }
 
-//TODO: implement this>>>> https://github.com/manifoldco/promptui
-
-func getWeather(weatherInterval string) {
+func getWeather(weatherInterval string, locationInfo CoordinateResponse) {
 	weatherAPI := os.Getenv("WEATHER_API")
 	//TODO:we need to get dynamic lat long somehow
-	var location = Location{lat: "33.441792", lon: "-94.037689"}
+	var location = Location{lat: fmt.Sprint(locationInfo.Lat), lon: fmt.Sprint(locationInfo.Lon)}
 
 	weatherURL := fmt.Sprintf("http://api.openweathermap.org/data/2.5/onecall?exclude=hourly,minutely,alerts&units=metric&lat=%s&lon=%s&appid=%s", location.lat, location.lon, weatherAPI)
-	log.Print(weatherURL)
+	// log.Print(weatherURL)
 
 	//Actual GET Req here
 	res, err := http.Get(weatherURL)
@@ -126,11 +126,7 @@ func initEnv() {
 	}
 }
 
-// type LocationResponse struct {
-// 	CoordinateResponse
-// }
-
-func locationPrompt() (CoordinateResponse ) {
+func locationPrompt() (coordinateResponse CoordinateResponse, err error) {
 	// var locationResponse LocationResponse
 	log.Print("Reading location...")
 
@@ -145,14 +141,14 @@ func locationPrompt() (CoordinateResponse ) {
 		log.Fatal("Prompt failed %v\n", err)
 	}
 
-	log.Printf("You choose %q\n", result)
+	log.Printf("You chose %q\n", result)
 
 	if result == "Manual" {
 		log.Fatal("Manual method not implmemented")
-
 	}
 
 	if result == "IP" {
+		var coordinateResponse CoordinateResponse
 		//Get the public IP
 		ipCMD := exec.Command("curl", "ifconfig.me")
 		stdout, err := ipCMD.Output()
@@ -165,28 +161,28 @@ func locationPrompt() (CoordinateResponse ) {
 		log.Print(ip)
 
 		//example: http://ip-api.com/json/71.241.244.40
-		//Run IP to get coordinate out of it
+		//Run IP to get coordinates out of it
 		var ipCoordURL = "http://ip-api.com/json/"
-		coordCMD := exec.Command("curl", ipCoordURL + ip)
+		coordCMD := exec.Command("curl", ipCoordURL+ip)
 		coordRes, err := coordCMD.Output()
 
 		if err != nil {
 			log.Print(err)
+			return coordinateResponse, errors.New("Failed to get IP address")
+			// return err
 		}
 
-		var coordinateResponse CoordinateResponse
 		json.Unmarshal([]byte(coordRes), &coordinateResponse)
 		log.Print(coordinateResponse)
-		// locationResponse = coordinateResponse
-		return coordinateResponse
+		return coordinateResponse, nil
 	}
-	// return nil
-	// return coordinateResponse
+	return coordinateResponse, nil
 }
 
 func main() {
 	//Adds file lines to log outputs for better debugging
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
+
 	//Load env file
 	initEnv()
 
@@ -200,9 +196,12 @@ func main() {
 			Aliases: []string{"d"},
 			Usage:   "weather for the current day",
 			Action: func(c *cli.Context) error {
-				loc := locationPrompt()
-				log.Printf(loc.City);
-				getWeather("day")
+				locationRes, err := locationPrompt()
+				if err != nil {
+					log.Fatal(err)
+				}
+				log.Printf(locationRes.City)
+				getWeather("day", locationRes)
 				return nil
 			},
 		},
@@ -211,7 +210,11 @@ func main() {
 			Aliases: []string{"w"},
 			Usage:   "weather for the current week",
 			Action: func(c *cli.Context) error {
-				getWeather("week")
+				locationRes, err := locationPrompt()
+				if err != nil {
+					log.Fatal(err)
+				}
+				getWeather("week", locationRes)
 				return nil
 			},
 		},
